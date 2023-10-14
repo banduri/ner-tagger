@@ -64,3 +64,51 @@ ZeroMQ is used to decouple the components so they can be scaled individually.
                  └─────────────────────────────┤              │
                                                └──────────────┘
 
+it is possible to run more then one ModelServer on the same host, while every instance uses a different GPU. It is also possible to setup multiple hosts each running a ModelServer. Since the 'slow'-Part is the use of the model there should be no need to setup more http-Workers then ModelServers. All http-Workers should connect to the same cacheServer.
+
+# Running
+
+    cd ner-tagger
+    source bin/activate
+    ./cacheServer.py &
+    ./modelServer.py &
+    ./zmqBroker.py &
+    ./nerapi.py
+
+# api endpoints
+
+## http-fronted
+
+the default API-Endpoint is
+    curl http://localhost:8000/api/ner -d '{"text": "die Kinder von Anton Schwarz haben in Dresden eine Wohnung. In dem Buch Traumwerkstadt wird die Wohnung beschrieben."}' -H "Content-Type: application/json"                           
+    {"PERSON": ["Anton Schwarz"], "GPE": ["Dresden"], "WORK_OF_ART": ["Traumwerkstadt"]}
+
+the text provided is split into seperate sentences. For every sentence a request to the model is done
+
+    (ner-tagger) ~/GITs/ner-tagger >>> cat data/cache_data.ndjson
+    {"die Kinder von Anton Schwarz haben in Dresden eine Wohnung.": {"PERSON": ["Anton Schwarz"], "GPE": ["Dresden"]}}
+    {"In dem Buch Traumwerkstadt wird die Wohnung beschrieben.": {"WORK_OF_ART": ["Traumwerkstadt"]}}
+
+Splitting up the text into sentences sometimes yields wrong results. 
+
+    curl http://localhost:8000/api/ner -d '{"text": "die Kinder von Elisabeth II. haben in Dresden eine Wohnung. In dem Buch Traumwerkstadt wird die Wohnung beschrieben."}' -H "Content-Type: application/json"                           
+    {"GPE": ["Dresden"], "WORK_OF_ART": ["Traumwerkstadt"]}
+
+    cat data/cache_data.ndjson
+    {"die Kinder von Elisabeth II.": {}}
+    {"haben in Dresden eine Wohnung.": {"GPE": ["Dresden"]}}
+    {"In dem Buch Traumwerkstadt wird die Wohnung beschrieben.": {"WORK_OF_ART": ["Traumwerkstadt"]}}
+
+the second endpoint does not split, but leads to a general problem with neural networks
+
+    curl http://localhost:8000/api/nernosplit -d '{"text": "die Kinder von Elisabeth II. haben in Dresden eine Wohnung. In dem Buch Traumwerkstadt wird die Wohnung beschrieben."}' -H "Content-Type: application/json"
+    {"PERSON": ["Elisabeth II"], "GPE": ["Dresden"]}
+
+    cat data/cache_data.ndjson
+    {"die Kinder von Elisabeth II. haben in Dresden eine Wohnung. In dem Buch Traumwerkstadt wird die Wohnung beschrieben.": {"PERSON": ["Elisabeth II"], "GPE": ["Dresden"]}}
+
+    curl http://localhost:8000/api/nernosplit -d '{"text": "die Kinder von Elisabeth II. haben in Dresden eine Wohnung. In dem Buch \"Traumwerkstadt\" wird die Wohnung beschrieben."}' -H "Content-Type: application/json"                
+    {"PERSON": ["Elisabeth II"], "GPE": ["Dresden"], "WORK_OF_ART": ["\"Traumwerkstadt\""]}
+
+## cacheServer
+
