@@ -1,0 +1,19 @@
+#!/usr/bin/make -f
+
+DH_VENV_ARGS=--with python-virtualenv --extra-virtualenv-arg "-p" --extra-virtualenv-arg "/usr/bin/python3" 
+
+%:
+	dh $@ $(DH_VENV_ARGS) 
+
+
+override_dh_strip:
+		dh_strip --exclude=numpy --exclude=scipy --exclude=torch --exclude=Pillow --exclude=python --exclude=cv2 --exclude=matplotlib --exclude=cffi --exclude=PIL --exclude=cv2
+
+override_dh_shlibdeps:
+		dh_shlibdeps -X/x86/ -X/PIL/.libs/ -X/psycopg2/.libs -X/psycopg2_binary.libs -X/numpy/ -X/scipy.libs -X/tokenizers.libs -X -X/Pillow.libs -X/torch/bin -X/nvfuser/ -X/Pillow.libs/ -X/torch/lib -X/numpy.libs/ -X/scipy/ -X/cv2/ -X/matplotlib/ -X/Qt/ --dpkg-shlibdeps-params=--ignore-missing-info
+
+override_dh_installsystemd:
+	dh_installsystemd --name=ner-tagger
+	dh_installsystemd --name=cacheServer
+	dh_installsystemd --name=modelServer
+	dh_installsystemd --name=zmqBroker

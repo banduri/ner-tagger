@@ -1,0 +1,22 @@
+[Unit]
+Description=NER-Tagger (webfrontend api)
+After=network.target
+
+[Service]
+Type=simple
+PIDFile=/var/run/ner-tagger.pid
+Environment=LANG=C.UTF-8
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/venvs/ner-tagger
+ExecStartPre=+/usr/bin/chown -R www-data:www-data /opt/venvs/ner-tagger/data
+ExecStart=/opt/venvs/ner-tagger/bin/python \
+	./nerapi.py --log info \
+        --host '[::]' \
+        --port 8000
+SuccessExitStatus=0 1 143
+RestartSec=1
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

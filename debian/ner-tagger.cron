@@ -1,0 +1,9 @@
+# /etc/cron.d/logcheck: crontab entries for the logcheck package
+
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+MAILTO=root
+
+27 23 * * 0       root    nice -n10 /opt/venvs/ner-tagger/ner-clean-cache.sh
+
+# EOF
+

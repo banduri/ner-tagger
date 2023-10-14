@@ -1,0 +1,5 @@
+git+https://github.com/zalandoresearch/flair.git#egg=flair
+nltk
+flask
+gunicorn
+pyzmq
