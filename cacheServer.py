@@ -143,8 +143,8 @@ provides a key-value cache via zmq. it accepts json in the form:
         if cmd is 'store' the "key" is used to store "value" data.
         if cmd is 'retrieve' the "key" is used to get data.
 
-        on cmd='store' '{"result": "<ACK|None>", "error": <null|problem>}' is send to conform or deny cachestoreage
-        on cmd='retrieve' '{"result": <data|None>}, "error": <null|problem>}' is send. None is a cachemiss
+        on cmd='store' '{"result": "<ACK|null>", "error": <null|problem>}' is send to conform or deny cachestoreage
+        on cmd='retrieve' '{"result": <data|null>}, "error": <null|problem>}' is send. null is a cachemiss
 
         'key' needs to be a string. From that string a uuid5-string is generated and used as the
         internal cachekey

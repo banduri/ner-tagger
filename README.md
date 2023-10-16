@@ -70,6 +70,7 @@ it is possible to run more then one ModelServer on the same host, while every in
 
     cd ner-tagger
     source bin/activate
+    python ./download_and_convert_model_for_local_use.py # only once to download the model and store it for local use
     ./cacheServer.py &
     ./modelServer.py &
     ./zmqBroker.py &
@@ -77,7 +78,7 @@ it is possible to run more then one ModelServer on the same host, while every in
 
 # api endpoints
 
-## http-fronted
+## http-frontend
 
 the default API-Endpoint is
     curl http://localhost:8000/api/ner -d '{"text": "die Kinder von Anton Schwarz haben in Dresden eine Wohnung. In dem Buch Traumwerkstadt wird die Wohnung beschrieben."}' -H "Content-Type: application/json"                           
@@ -91,7 +92,7 @@ the text provided is split into seperate sentences. For every sentence a request
 
 Splitting up the text into sentences sometimes yields wrong results. 
 
-    curl http://localhost:8000/api/ner -d '{"text": "die Kinder von Elisabeth II. haben in Dresden eine Wohnung. In dem Buch Traumwerkstadt wird die Wohnung beschrieben."}' -H "Content-Type: application/json"                           
+    curl http://localhost:8000/api/ner -d '{"text": "die Kinder von Elisabeth II. haben in Dresden eine Wohnung. In dem Buch Traumwerkstadt wird die Wohnung beschrieben."}' -H "Content-Type: application/json"
     {"GPE": ["Dresden"], "WORK_OF_ART": ["Traumwerkstadt"]}
 
     cat data/cache_data.ndjson
@@ -107,8 +108,41 @@ the second endpoint does not split, but leads to a general problem with neural n
     cat data/cache_data.ndjson
     {"die Kinder von Elisabeth II. haben in Dresden eine Wohnung. In dem Buch Traumwerkstadt wird die Wohnung beschrieben.": {"PERSON": ["Elisabeth II"], "GPE": ["Dresden"]}}
 
-    curl http://localhost:8000/api/nernosplit -d '{"text": "die Kinder von Elisabeth II. haben in Dresden eine Wohnung. In dem Buch \"Traumwerkstadt\" wird die Wohnung beschrieben."}' -H "Content-Type: application/json"                
+    curl http://localhost:8000/api/nernosplit -d '{"text": "die Kinder von Elisabeth II. haben in Dresden eine Wohnung. In dem Buch \"Traumwerkstadt\" wird die Wohnung beschrieben."}' -H "Content-Type: application/json"
     {"PERSON": ["Elisabeth II"], "GPE": ["Dresden"], "WORK_OF_ART": ["\"Traumwerkstadt\""]}
 
-## cacheServer
+to only get the sentences without any models involved:
+    curl http://localhost:8000/api/split -d '{"text": "die Kinder von Elisabeth II. haben in Dresden eine Wohnung. In dem Buch \"Traumwerkstadt\" wird die Wohnung beschrieben."}' -H "Content-Type: application/json"
+    {"splits": ["die Kinder von Elisabeth II.", "haben in Dresden eine Wohnung.", "In dem Buch \"Traumwerkstadt\" wird die Wohnung beschrieben."]}
+
+## Zeromq-endpoints
+
+The cacheserver and the modelserver are used via json-requests.
+
+### cacheserver
+
+    { "cmd" "<store|retrieve>", "key": data, "value": data }
+
+if cmd is 'store' the "key" is used to store "value" data.
+if cmd is 'retrieve' the "key" is used to get data.
+
+on cmd='store' '
+
+    {"result": "<ACK|null>", "error": <null|problem>}'
+
+is send to conform or deny cachestoreage. on cmd='retrieve'
+
+    '{"result": <data|null>}, "error": <null|problem>}'
+
+is send. null as a result is a cachemiss. 'key' needs to be a string. From that string a uuid5-string is generated and used as the internal cachekey if anything fails an error not null is returned.
+
+### modelserver
+
+it accepts json in the form:
+
+    { "text" "<text>" }
+
+it returns a json-string with the result of the model-prediction:
+
+    { "result": <data|null>, "error": <msg|null> }
 
