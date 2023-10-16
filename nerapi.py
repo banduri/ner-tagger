@@ -43,6 +43,9 @@ the '/api/nernosplit' endpoint will try to process the text without splitting at
     parser.add_argument('--zmqmodelsocket', type = str,
                         default = "tcp://127.0.0.1:5559",
                         help = "the socket of the model-server or broker")
+    parser.add_argument('--splitlang', type = str,
+                        default = "german",
+                        help = "language to assume for splitting text into sentences. needs the nltk-networks. currently only german and english")
     parser.add_argument('--maxnosplit', type = int,
                         default = 50000,
                         help = "the maximum length of the text when using the nosplit endpoint. if the size is exceded the split (default) endpoint will be used. large text will lead high vRAM usage and workers may not like that.")
@@ -54,6 +57,7 @@ the '/api/nernosplit' endpoint will try to process the text without splitting at
     parser.add_argument('--workertimeout', type = int,
                         default = 30,
                         help = "how long to wait for a worker to finish the request. if on cpu you may set it to 0 to disable any timeouts")
+
 
     args = parser.parse_args()
 

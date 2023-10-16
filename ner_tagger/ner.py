@@ -47,7 +47,7 @@ def splitsent(text, language='german'):
 
 def textsplitner(sentences,args):
     result = defaultdict(set)
-    for sent in splitsent(sentences):
+    for sent in splitsent(sentences, language=args.splitlang):
         try:
             data = ner(sent,args)
             for key,value in data.items():
@@ -134,6 +134,7 @@ def ner(sent,args):
 
 def preparejson(data):
     result = {}
+    
     if data:
         data = dict(data)
     else:
@@ -163,11 +164,21 @@ def create_app(description,args):
         text = request.get_json().get('text')
         # sometimes text is just to big to process it as one
         if len(text) > args.maxnosplit:
+            LOGGER.warning("Maxnosplit reached, using split instead")
             return json.dumps(preparejson(textsplitner(text,args)))
         else:
             return json.dumps(preparejson(ner(text,args)))
 
+    @nerapi.route('/api/split',methods=['POST'])
+    def api_split():
+
+        text = request.get_json().get('text')
+        result = {'splits': splitsent(text,language=args.splitlang)}
+        return json.dumps(preparejson(result))
+
+
     return nerapi
+
 
 # https://docs.gunicorn.org/en/stable/custom.html
 class StandaloneApplication(gunicorn.app.base.BaseApplication):
