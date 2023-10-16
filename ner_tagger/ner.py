@@ -151,25 +151,44 @@ def create_app(description,args):
     def index():
         return description
 
-    @nerapi.route('/api/ner',methods=['POST'])
+    @nerapi.route('/api/v1/ner',methods=['POST'])
     def api_ner():
 
         text = request.get_json().get('text')
                 
         return json.dumps(preparejson(textsplitner(text,args)))
 
-    @nerapi.route('/api/nernosplit',methods=['POST'])
+    @nerapi.route('/api/v1/nernosplit',methods=['POST'])
     def api_nernosplit():
-
         text = request.get_json().get('text')
         # sometimes text is just to big to process it as one
         if len(text) > args.maxnosplit:
             LOGGER.warning("Maxnosplit reached, using split instead")
-            return json.dumps(preparejson(textsplitner(text,args)))
+            # split on sentences
+            sentences = splitsent(text, args.splitlang)
+            parts = []
+            for sentence in sentences:
+                partidx = 0
+                # as long as the part is smaller then maxnosplit minus 10%, add the sentence to the part 
+                if len(parts[partidx]) < ( args.maxnosplit - int(args.maxnosplit * 0.1) ):
+                    parts[partidx] = parts[partidx] + " " + str(sentence)
+                else:
+                    partidx = partidx + 1
+                    parts[partidx] = parts[partidx] + " " + str(sentence)
+
+            # run ner-tagging on every part
+            result = defaultdict(set)
+            for part in parts:
+                res = ner(part,args)
+                # merge the results
+                for key in res.keys():
+                    result[key].update(res[key])
+                    
+            return json.dumps(preparejson(result))
         else:
             return json.dumps(preparejson(ner(text,args)))
 
-    @nerapi.route('/api/split',methods=['POST'])
+    @nerapi.route('/api/v1/split',methods=['POST'])
     def api_split():
 
         text = request.get_json().get('text')
