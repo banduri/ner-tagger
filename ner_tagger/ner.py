@@ -15,6 +15,10 @@ from flask import request, Flask
 import gunicorn.app.base
 
 import zmq
+
+# used for data postprocessing
+from .middleware import middleware
+
 # enforce german locale
 locale.setlocale(locale.LC_ALL, 'de_DE.UTF-8')
 
@@ -34,6 +38,17 @@ def cleanup(text):
     
     return text
 
+def splitsentspacy(text):
+    import spacy
+    result = []
+    #nlp = spacy.load("de_core_news_sm")
+    nlp = spacy.load("de_core_news_lg")
+    for i in nlp(text).sents:    
+        sent = cleanup(str(i))
+        result.append(sent)
+    del nlp
+    return result
+
 def splitsent(text, language='german'):
     result = []
     text = cleanup(text)
@@ -46,12 +61,12 @@ def splitsent(text, language='german'):
     return result
 
 def textsplitner(sentences,args):
-    result = defaultdict(set)
-    for sent in splitsent(sentences, language=args.splitlang):
+    result = []
+    #for sent in splitsent(sentences, language=args.splitlang):
+    for sent in splitsentspacy(sentences):
         try:
             data = ner(sent,args)
-            for key,value in data.items():
-                result[key].update(value)
+            result.append(data)
         except Exception as exep:
             LOGGER.warning("could not process request: %s",str(exep))
     return result
@@ -72,10 +87,8 @@ def cacherequest(sent,args):
     jmsg = json.loads(cachemsg.decode("utf-8"))
     if not isinstance(jmsg['result'],type(None)):
         LOGGER.info("cachehit for: %s",sent)
-        data = defaultdict(set)
-        for tag in jmsg['result']:
-            data[tag].update(set(jmsg['result'][tag]))
-            # the exception else-block is not executed if we continue, the finally-block is
+        data = jmsg['result']
+
         return data
     else:
         LOGGER.info("not a cachehit")
@@ -92,7 +105,7 @@ def cacheit(key,value,args):
     cachesocket.send(json.dumps({
         "cmd": "store",
         "key": key,
-        "value": preparejson(value)
+        "value": value
     }).encode('utf-8'))
     cachemsg = cachesocket.recv()
     # at that point we are at fire and forget, either store it or not, i don't care
@@ -101,6 +114,7 @@ def cacheit(key,value,args):
         LOGGER.info("CacheServer did not store: %s",str(jmsg))
 
 def modelrequest(sent,args):
+    ## XXX better error checking... or any checking at all
     modelcontext = zmq.Context()
     modelsocket = modelcontext.socket(zmq.REQ)
     modelsocket.connect(args.zmqmodelsocket)
@@ -125,23 +139,9 @@ def ner(sent,args):
             return data
     # if we are still here, we ask the zmq-worker
     data = modelrequest(sent,args)
-
-    # store in cache
-    if not args.disablecache:
-        cacheit(key=sent,value=data, args=args)
-        
+    LOGGER.debug("modeldata: %s",str(data))
+            
     return data
-
-def preparejson(data):
-    result = {}
-    
-    if data:
-        data = dict(data)
-    else:
-        data={}
-    for i in data.keys():
-        result[i] = list(data[i])
-    return result    
 
 def create_app(description,args):
 
@@ -155,8 +155,16 @@ def create_app(description,args):
     def api_ner():
 
         text = request.get_json().get('text')
-                
-        return json.dumps(preparejson(textsplitner(text,args)))
+        data = textsplitner(text,args)
+    
+        # store in cache
+        if not args.disablecache:
+            cacheit(key=text,value=data, args=args)
+
+        # do postprocessing 
+        data = middleware[args.middleware](data)
+
+        return json.dumps(data)
 
     @nerapi.route('/api/v1/nernosplit',methods=['POST'])
     def api_nernosplit():
@@ -166,34 +174,49 @@ def create_app(description,args):
             LOGGER.warning("Maxnosplit reached, using split instead")
             # split on sentences
             sentences = splitsent(text, args.splitlang)
-            parts = []
+            parts = [""]
             for sentence in sentences:
-                partidx = 0
+                partidx = len(parts) - 1
                 # as long as the part is smaller then maxnosplit minus 10%, add the sentence to the part 
                 if len(parts[partidx]) < ( args.maxnosplit - int(args.maxnosplit * 0.1) ):
                     parts[partidx] = parts[partidx] + " " + str(sentence)
                 else:
-                    partidx = partidx + 1
-                    parts[partidx] = parts[partidx] + " " + str(sentence)
+                    parts.append(str(sentence))
 
-            # run ner-tagging on every part
-            result = defaultdict(set)
+            # run model on every part
+            result = []
             for part in parts:
-                res = ner(part,args)
+                data = ner(part,args)
+                # store in cache
+                if not args.disablecache:
+                    cacheit(key=part,value=data, args=args)
                 # merge the results
-                for key in res.keys():
-                    result[key].update(res[key])
-                    
-            return json.dumps(preparejson(result))
+                result.append(data)
+
+            # do postprocessing 
+            result = middleware[args.middleware](result)
+
+            return json.dumps(result)
         else:
-            return json.dumps(preparejson(ner(text,args)))
+            result = ner(text,args)
+            # do postprocessing 
+            result = middleware[args.middleware](result)
+            
+            return json.dumps(result)
 
     @nerapi.route('/api/v1/split',methods=['POST'])
     def api_split():
 
         text = request.get_json().get('text')
         result = {'splits': splitsent(text,language=args.splitlang)}
-        return json.dumps(preparejson(result))
+        return json.dumps(result)
+
+    @nerapi.route('/api/v1/splitspacy',methods=['POST'])
+    def api_splitspacy():
+
+        text = request.get_json().get('text')
+        result = {'splits': splitsentspacy(text)}
+        return json.dumps(result)
 
 
     return nerapi

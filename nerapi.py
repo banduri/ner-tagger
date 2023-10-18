@@ -6,7 +6,9 @@ import json
 import logging
 
 import torch
-from ner_tagger import LOGGER, StandaloneApplication, create_app
+from ner_tagger import LOGGER, StandaloneApplication, create_app, middleware
+
+
 
 # argparse magic
 class RawTextDefaultsHelpFormatter(argparse.RawDescriptionHelpFormatter,
@@ -47,10 +49,14 @@ the '/api/nernosplit' endpoint will try to process the text without splitting at
                         default = "german",
                         help = "language to assume for splitting text into sentences. needs the nltk-networks. currently only german and english")
     parser.add_argument('--maxnosplit', type = int,
-                        default = 50000,
-                        help = "the maximum length of the text when using the nosplit endpoint. if the size is exceded the split (default) endpoint will be used. large text will lead high vRAM usage and workers may not like that.")
+                        default = 500,
+                        help = "the maximum length of the text when using the nosplit endpoint. if the size is exceded the split (default) endpoint will be used. large text will lead high vRAM usage and workers may not like that.Also the model may not beeing trained on long context.")
     parser.add_argument('--disablecache', action='store_true',
                         help = "disable the usage of a cache")
+    parser.add_argument('--middleware', type = str,
+                        default = 'nertagger',
+                        choices=list(middleware.keys()),
+                        help = 'the kind of postprocessing of the modeldata. sentiment creates the avg-score of multiple sentences. nertagger removes information about position and groups by NER-Type')
     parser.add_argument('--workers', type = int,
                         default = 3,
                         help = "the amount of gunicorn workers")

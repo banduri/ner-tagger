@@ -81,7 +81,7 @@ it is possible to run more then one ModelServer on the same host, while every in
 ## http-frontend
 
 the default API-Endpoint is
-    curl http://localhost:8000/api/ner -d '{"text": "die Kinder von Anton Schwarz haben in Dresden eine Wohnung. In dem Buch Traumwerkstadt wird die Wohnung beschrieben."}' -H "Content-Type: application/json"                           
+    curl http://localhost:8000/api/v1/ner -d '{"text": "die Kinder von Anton Schwarz haben in Dresden eine Wohnung. In dem Buch Traumwerkstadt wird die Wohnung beschrieben."}' -H "Content-Type: application/json"                           
     {"PERSON": ["Anton Schwarz"], "GPE": ["Dresden"], "WORK_OF_ART": ["Traumwerkstadt"]}
 
 the text provided is split into seperate sentences. For every sentence a request to the model is done
@@ -92,7 +92,7 @@ the text provided is split into seperate sentences. For every sentence a request
 
 Splitting up the text into sentences sometimes yields wrong results. 
 
-    curl http://localhost:8000/api/ner -d '{"text": "die Kinder von Elisabeth II. haben in Dresden eine Wohnung. In dem Buch Traumwerkstadt wird die Wohnung beschrieben."}' -H "Content-Type: application/json"
+    curl http://localhost:8000/api/v1/ner -d '{"text": "die Kinder von Elisabeth II. haben in Dresden eine Wohnung. In dem Buch Traumwerkstadt wird die Wohnung beschrieben."}' -H "Content-Type: application/json"
     {"GPE": ["Dresden"], "WORK_OF_ART": ["Traumwerkstadt"]}
 
     cat data/cache_data.ndjson
@@ -102,18 +102,20 @@ Splitting up the text into sentences sometimes yields wrong results.
 
 the second endpoint does not split, but leads to a general problem with neural networks
 
-    curl http://localhost:8000/api/nernosplit -d '{"text": "die Kinder von Elisabeth II. haben in Dresden eine Wohnung. In dem Buch Traumwerkstadt wird die Wohnung beschrieben."}' -H "Content-Type: application/json"
+    curl http://localhost:8000/api/v1/nernosplit -d '{"text": "die Kinder von Elisabeth II. haben in Dresden eine Wohnung. In dem Buch Traumwerkstadt wird die Wohnung beschrieben."}' -H "Content-Type: application/json"
     {"PERSON": ["Elisabeth II"], "GPE": ["Dresden"]}
 
     cat data/cache_data.ndjson
     {"die Kinder von Elisabeth II. haben in Dresden eine Wohnung. In dem Buch Traumwerkstadt wird die Wohnung beschrieben.": {"PERSON": ["Elisabeth II"], "GPE": ["Dresden"]}}
 
-    curl http://localhost:8000/api/nernosplit -d '{"text": "die Kinder von Elisabeth II. haben in Dresden eine Wohnung. In dem Buch \"Traumwerkstadt\" wird die Wohnung beschrieben."}' -H "Content-Type: application/json"
+    curl http://localhost:8000/api/v1/nernosplit -d '{"text": "die Kinder von Elisabeth II. haben in Dresden eine Wohnung. In dem Buch \"Traumwerkstadt\" wird die Wohnung beschrieben."}' -H "Content-Type: application/json"
     {"PERSON": ["Elisabeth II"], "GPE": ["Dresden"], "WORK_OF_ART": ["\"Traumwerkstadt\""]}
 
 to only get the sentences without any models involved:
-    curl http://localhost:8000/api/split -d '{"text": "die Kinder von Elisabeth II. haben in Dresden eine Wohnung. In dem Buch \"Traumwerkstadt\" wird die Wohnung beschrieben."}' -H "Content-Type: application/json"
+    curl http://localhost:8000/api/v1/split -d '{"text": "die Kinder von Elisabeth II. haben in Dresden eine Wohnung. In dem Buch \"Traumwerkstadt\" wird die Wohnung beschrieben."}' -H "Content-Type: application/json"
     {"splits": ["die Kinder von Elisabeth II.", "haben in Dresden eine Wohnung.", "In dem Buch \"Traumwerkstadt\" wird die Wohnung beschrieben."]}
+
+if the 'maxnosplit' value is reached on the nosplit-endpoint, the text will be splitup at sentence bounderies into parts a little smaller then the maxnosplit value.
 
 ## Zeromq-endpoints
 

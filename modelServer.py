@@ -28,15 +28,6 @@ class RawTextDefaultsHelpFormatter(argparse.RawDescriptionHelpFormatter,
                                    argparse.ArgumentDefaultsHelpFormatter):
     pass
 
-def preparejson(data):
-    result = {}
-    if data:
-        data = dict(data)
-    else:
-        data={}
-    for i in data.keys():
-        result[i] = list(data[i])
-    return result
 
 def main(args):
     model = None
@@ -76,7 +67,7 @@ def main(args):
 
     while True:
         sentence = None
-        result = defaultdict(set)
+        result = []
         jmsg = None
         
         message = socket.recv()
@@ -121,17 +112,8 @@ def main(args):
             }).encode('utf-8'))
             
         LOGGER.info("done prediction")
+        result = sentence.to_dict()
 
-        # flair-specific data-structure - reorder it a bit
-
-        for span in sentence.get_spans():
-            # filter out low confidence
-            span = span.to_dict()
-            if span['labels'][0]['confidence'] < 0.95:
-                continue
-
-            result[span['labels'][0]['value']].add(span['text'])
-        result = preparejson(result)
         socket.send(json.dumps({
             "result": result,
             "error": None
