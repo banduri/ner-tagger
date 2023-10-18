@@ -6,7 +6,7 @@ import json
 import logging
 
 import torch
-from ner_tagger import LOGGER, StandaloneApplication, create_app, middleware
+from ner_tagger import LOGGER, StandaloneApplication, create_app, middleware, sentsplitter
 
 
 
@@ -45,9 +45,12 @@ the '/api/nernosplit' endpoint will try to process the text without splitting at
     parser.add_argument('--zmqmodelsocket', type = str,
                         default = "tcp://127.0.0.1:5559",
                         help = "the socket of the model-server or broker")
+    parser.add_argument('--zmqsplitsocket', type = str,
+                        default = None,
+                        help = "the socket to the frontend of the 'split-zmqbroker'.")
     parser.add_argument('--splitlang', type = str,
                         default = "german",
-                        help = "language to assume for splitting text into sentences. needs the nltk-networks. currently only german and english")
+                        help = "language to assume for splitting text into sentences. needs the nltk-networks. currently only german and english. ")
     parser.add_argument('--maxnosplit', type = int,
                         default = 500,
                         help = "the maximum length of the text when using the nosplit endpoint. if the size is exceded the split (default) endpoint will be used. large text will lead high vRAM usage and workers may not like that.Also the model may not beeing trained on long context.")
@@ -57,6 +60,10 @@ the '/api/nernosplit' endpoint will try to process the text without splitting at
                         default = 'nertagger',
                         choices=list(middleware.keys()),
                         help = 'the kind of postprocessing of the modeldata. sentiment creates the avg-score of multiple sentences. nertagger removes information about position and groups by NER-Type')
+    parser.add_argument('--sentsplitter', type = str,
+                        default = 'nltk',
+                        choices=list(sentsplitter.keys()),
+                        help = 'how to split paragraphs into sentences. nltk is rather fast an does not use much memory, while zmq tries to connect to a zmq-broker given parameter zmqsplitsocket.')
     parser.add_argument('--workers', type = int,
                         default = 3,
                         help = "the amount of gunicorn workers")

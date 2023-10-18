@@ -7,13 +7,9 @@ from collections import defaultdict
 
 import zmq
 
-import flair
-from flair.data import Span
-from flair.nn import Classifier
-from flair.data import Sentence
+import spacy
 
 import torch
-
 
 # configure logging and LOGGER
 logging.basicConfig(format='%(asctime)s %(name)s' +
@@ -31,24 +27,20 @@ class RawTextDefaultsHelpFormatter(argparse.RawDescriptionHelpFormatter,
 def main(args):
     model = None
     
-    # limit number of threads
-    if args.threads > 0:
-        torch.set_num_threads(args.threads)
-        torch.set_num_interop_threads(args.threads)
-
     LOGGER.debug("Setting device")
-    device = torch.device('cpu')
+
     if args.device == "auto":
-        if torch.cuda.is_available():
-            device = torch.device('cuda')
-    else:
-        device = torch.device(args.device)
-    flair.device = device
-    LOGGER.info("Device set to %s",str(device))
+        spacy.prefer_gpu(args.deviceid)        
+    elif args.device == "cpu":
+        spacy.require_cpu()
+    elif args.device == "gpu":
+        spacy.require_gpu(args.deviceid)
+
+    LOGGER.info("Device set to %s",str(args.device))
 
     LOGGER.info("Loading model")
     try:
-        model = Classifier.load(args.model)
+        model = spacy.load(args.model)
     except Exception as excep:
         LOGGER.critical("Failed to load model: %s",str(excep))
         return
@@ -81,17 +73,7 @@ def main(args):
             }).encode('utf-8'))
             continue
 
-        if 'text' in jmsg:
-            try:
-                sentence = Sentence(jmsg['text'])
-            except Exception as excep:
-                LOGGER.warning("could not create datastructure for model: %s",str(excep))
-                socket.send(json.dumps({
-                    "result": None,
-                    "error": "could not create (internal) datastructure for model"
-                }).encode('utf-8'))
-                continue
-        else:
+        if 'text' not in jmsg:
             LOGGER.warning("skipping: no text in message")
             socket.send(json.dumps({
                 "result": None,
@@ -102,7 +84,10 @@ def main(args):
 
         LOGGER.info("starting prediction:")
         try:
-            model.predict(sentence)
+            sentences = model(jmsg['text']).sents
+            for sentence in sentences:
+                # need to do that to ensure it is a string that can be converted to json
+                result.append(str(sentence))
         except Exception as excep:
             LOGGER.warning("predition failed: %s",str(excep))
             socket.send(json.dumps({
@@ -111,7 +96,6 @@ def main(args):
             }).encode('utf-8'))
             
         LOGGER.info("done prediction")
-        result = sentence.to_dict()
 
         socket.send(json.dumps({
             "result": result,
@@ -127,7 +111,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         formatter_class = RawTextDefaultsHelpFormatter,
         description="""
-provides a model prediction via zmq. it accepts json in the form: { "text" "<text>" }
+provides a spacy-sentence-splitmodel prediction via zmq. it accepts json in the form: { "text" "<text>" }
 it returns a json-string with the result of the model-prediction: { "result": <data|null>, "error": <msg|null> }
 the program connects to a zmq-'broker'/proxy on the specific socket. It does not provide
 a socket on its own.
@@ -143,20 +127,20 @@ if "error" is not "null" something happend to the model and the "null"-result is
                         default='warning',
                         help = 'set the loglevel')
 
-    parser.add_argument('--threads', type = int,
-                        default = 0,
-                        help = "limit the amount of CPU-threads that can be used; 0 is equivalent to the number of CPUs in the system")
     parser.add_argument('--device', type = str,
-                        choices=['auto','cpu','cuda','cuda:0','cuda:1'], 
+                        choices=['auto','cpu','gpu'], 
                         default = "auto",
-                        help = "define where to run. Defaults to 'cuda' if available 'cpu' otherwise")
+                        help = "define where to run. Defaults to 'gpu' if available 'cpu' otherwise")
+    parser.add_argument('--deviceid', type = int,
+                        default = 0,
+                        help = "define which deviceid to use - other frameworks use 'cuda:0' to force the device")
 
     parser.add_argument('--model', type = str,
-                        default = "models/ner-english-ontonotes-large.bin",
-                        help = "which model to use - to download other check downloadscript and flairdocumentation")
+                        default = "de_dep_news_trf", # de_core_news_lg
+                        help = "which model to use - needs to be installed via pip - check https://spacy.io/usage to download models for your hardware/language")
 
     parser.add_argument('--zmqsocket', type = str,
-                        default = "tcp://localhost:5560",
+                        default = "tcp://localhost:5562",
                         help = "where to find the zmq-proxy/broker to register as worker")
 
     parser.add_argument('--keepcudacache', action="store_true",

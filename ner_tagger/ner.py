@@ -4,10 +4,7 @@ import logging
 import json
 from collections import defaultdict
 
-import re
 import uuid
-
-import nltk
 
 from flask import request, Flask
 
@@ -19,6 +16,9 @@ import zmq
 # used for data postprocessing
 from .middleware import middleware
 
+# used to split into sentence
+from .sentsplitter import sentsplitter
+
 # enforce german locale
 locale.setlocale(locale.LC_ALL, 'de_DE.UTF-8')
 
@@ -28,45 +28,13 @@ logging.basicConfig(format='%(asctime)s %(name)s' +
         '\t%(levelname)s:\t%(message)s',level=logging.WARN)
 LOGGER = logging.getLogger(__name__)
 
-def cleanup(text):
-    text = text.replace("\n"," ")
-    pattern = re.compile(r'\s{2,}',flags=re.UNICODE)
-    text = re.sub(pattern, ' ', text)
-
-    pattern = re.compile(r'­',flags=re.UNICODE)
-    text = re.sub(pattern, ' ', text)
-    
-    return text
-
-def splitsentspacy(text):
-    import spacy
-    result = []
-    #nlp = spacy.load("de_core_news_sm")
-    nlp = spacy.load("de_core_news_lg")
-    for i in nlp(text).sents:    
-        sent = cleanup(str(i))
-        result.append(sent)
-    del nlp
-    return result
-
-def splitsent(text, language='german'):
-    result = []
-    text = cleanup(text)
-    sent_text = nltk.sent_tokenize(text, language=language) # this gives us a list of sentences
-        
-    # now loop over each sentence and clean it separately
-    for sentence in sent_text:
-        result.append(cleanup(sentence))
-
-    return result
-
 def textsplitner(sentences,args):
     result = []
-    #for sent in splitsent(sentences, language=args.splitlang):
-    for sent in splitsentspacy(sentences):
+    for sent in sentsplitter[args.sentsplitter](sentences,args):
         try:
             data = ner(sent,args)
             result.append(data)
+
         except Exception as exep:
             LOGGER.warning("could not process request: %s",str(exep))
     return result
@@ -125,13 +93,9 @@ def modelrequest(sent,args):
     jmsg = json.loads(modelmsg.decode("utf-8"))
     return jmsg['result']
     
-    
 def ner(sent,args):
     
     data = defaultdict(set)
-    # flair supports to predict multiple sentences at once, but
-    # if an exceptions occurse on one sentence all fails
-    # cacheuse would be useless
 
     if not args.disablecache:
         data = cacherequest(sent,args)
@@ -139,11 +103,15 @@ def ner(sent,args):
             return data
     # if we are still here, we ask the zmq-worker
     data = modelrequest(sent,args)
+    # store in cache
+    if not args.disablecache:
+        cacheit(key=sent,value=data, args=args)
+
     LOGGER.debug("modeldata: %s",str(data))
             
     return data
 
-def create_app(description,args):
+def create_app(description, args):
 
     nerapi = Flask(__name__)
     
@@ -157,10 +125,6 @@ def create_app(description,args):
         text = request.get_json().get('text')
         data = textsplitner(text,args)
     
-        # store in cache
-        if not args.disablecache:
-            cacheit(key=text,value=data, args=args)
-
         # do postprocessing 
         data = middleware[args.middleware](data)
 
@@ -173,7 +137,7 @@ def create_app(description,args):
         if len(text) > args.maxnosplit:
             LOGGER.warning("Maxnosplit reached, using split instead")
             # split on sentences
-            sentences = splitsent(text, args.splitlang)
+            sentences = sentsplitter[args.sentsplitter](text,args)
             parts = [""]
             for sentence in sentences:
                 partidx = len(parts) - 1
@@ -187,9 +151,6 @@ def create_app(description,args):
             result = []
             for part in parts:
                 data = ner(part,args)
-                # store in cache
-                if not args.disablecache:
-                    cacheit(key=part,value=data, args=args)
                 # merge the results
                 result.append(data)
 
@@ -206,16 +167,8 @@ def create_app(description,args):
 
     @nerapi.route('/api/v1/split',methods=['POST'])
     def api_split():
-
         text = request.get_json().get('text')
-        result = {'splits': splitsent(text,language=args.splitlang)}
-        return json.dumps(result)
-
-    @nerapi.route('/api/v1/splitspacy',methods=['POST'])
-    def api_splitspacy():
-
-        text = request.get_json().get('text')
-        result = {'splits': splitsentspacy(text)}
+        result = {'splits': sentsplitter[args.sentsplitter](text,args)}
         return json.dumps(result)
 
 
