@@ -46,8 +46,11 @@ the '/api/nernosplit' endpoint will try to process the text without splitting at
                         default = "tcp://127.0.0.1:5559",
                         help = "the socket of the model-server or broker")
     parser.add_argument('--zmqsplitsocket', type = str,
-                        default = None,
+                        default = "tcp://127.0.0.1:5561",
                         help = "the socket to the frontend of the 'split-zmqbroker'.")
+    parser.add_argument('--zmqmiddlewaresocket', type = str,
+                        default = "tcp://127.0.0.1:5563",
+                        help = "the socket to the frontend of the 'middleware-zmqbroker'.")
     parser.add_argument('--splitlang', type = str,
                         default = "german",
                         help = "language to assume for splitting text into sentences. needs the nltk-networks. currently only german and english. ")
@@ -60,6 +63,15 @@ the '/api/nernosplit' endpoint will try to process the text without splitting at
                         default = 'nertagger',
                         choices=list(middleware.keys()),
                         help = 'the kind of postprocessing of the modeldata. sentiment creates the avg-score of multiple sentences. nertagger removes information about position and groups by NER-Type')
+    parser.add_argument('--sentimentpositiv', type = str, nargs='+',
+                        default = ["OTHER","POSITIV"],
+                        help = "if a sentiment-middleware and a sentiment model is used consider this as 'nice' labels")
+    parser.add_argument('--sentimentnegativ', type = str, nargs='+',
+                        default = ["NEGATIV","OFFENSE"],
+                        help = "if a sentiment-middleware and a sentiment model is used consider this as 'bad' labels")
+    parser.add_argument('--nerthreshold', type = float,
+                        default = 0.95,
+                        help = 'every NER-Tag produced by the model comes with a confidence. with the nertaggermiddleware enabled, labes with a confidence lower then this value are ignored and filted out.')
     parser.add_argument('--sentsplitter', type = str,
                         default = 'nltk',
                         choices=list(sentsplitter.keys()),

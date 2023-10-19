@@ -1,4 +1,6 @@
 from collections import defaultdict
+import json
+import zmq
 
 
 def passthroughmiddleware(data):
@@ -7,7 +9,7 @@ def passthroughmiddleware(data):
     """
     return data
     
-def sentimentmiddleware(data):
+def sentimentmiddleware(data,args):
     """
     takes multiple entries from data['labels'] with value "POSITIV","NEGATIV","OTHER" and "OFFENSE"
     sums them up to one score. POSITIV and OTHER are interpretated as positiv values
@@ -27,9 +29,9 @@ def sentimentmiddleware(data):
         if 'labels' in datapoint and len(datapoint['labels']) > 0 and isinstance(datapoint['labels'],list):
             for l in datapoint['labels']:
                 totalDataCounter = totalDataCounter + 1
-                if l['value'] in ("OTHER","POSITIV"):
+                if l['value'] in args.sentimentpositiv:
                     score = score + l['confidence']
-                elif l['value'] in ("NEGATIV","OFFENSE"):
+                elif l['value'] in args.sentimentnegativ:
                     score = score - l['confidence']
                 else:
                     wrongDataCounter = wrongDataCounter + 1
@@ -38,7 +40,7 @@ def sentimentmiddleware(data):
 
     return {'score': score}
 
-def nertaggermiddleware(data,threshold=0.95):
+def nertaggermiddleware(data,args):
     """
     takes multiple from data['entities'] discards any 'span' information like start and stop and only
     provides the NERs found in the text. also labels with a confidence smaller then threshold are filtered out
@@ -55,7 +57,7 @@ def nertaggermiddleware(data,threshold=0.95):
                 confidence = e['labels'][0]['confidence']
                 label = e['labels'][0]['value']
                 text = e['text']
-                if confidence >= threshold:
+                if confidence >= args.nerthreshold:
                     processdata[label].add(text)
 
     # make everything a list again
@@ -64,48 +66,22 @@ def nertaggermiddleware(data,threshold=0.95):
 
     return result
 
-def nerlemmarmiddleware(data,threshold=0.95):
-    """
-    takes multiple from data['entities'] discards any 'span' information like start and stop and only
-    provides the NERs found in the text. also labels with a confidence smaller then threshold are filtered out
-    does lematarization using spacy
-    """
-    import spacy
-    nlp = spacy.load("de_core_news_lg", disable=["ner"])
+def zmqmiddleware(data,args):
+    ## XXX better error checking... or any checking at all
+    context = zmq.Context()
+    socket = context.socket(zmq.REQ)
+    socket.connect(args.zmqmiddlewaresocket)
+    socket.send(json.dumps({
+        "data": data
+    }).encode('utf-8'))
+    msg = socket.recv()
+    jmsg = json.loads(msg.decode("utf-8"))
+    return jmsg['result']
 
-    processdata = defaultdict(set)
-    result = {}
-    # in the case of splitting the text, data is an array of dict. otherwise it is a dict
-    # let's make everything an array an process it the same way
-    if not isinstance(data,list):
-        data = [data]
-    for datapoint in data:
-        if 'entities' in datapoint and len(datapoint['entities']) > 0 and isinstance(datapoint['entities'],list):
-            for e in datapoint['entities']:
-                confidence = e['labels'][0]['confidence']
-                label = e['labels'][0]['value']
-                text = []
-                if confidence >= threshold:
-                    doc = nlp(e['text'])
-
-                    for token in doc:
-                        # filter out german artikels like 'der die das'
-                        if token.tag_ != "ART":
-                            text.append(token.lemma_)
-                    text = " ".join(text)        
-                    processdata[label].add(text)
-                
-
-    # make everything a list again
-    for key,value in processdata.items():
-        result[key] = list(value)
-
-    del nlp
-    return result
 
 middleware = {
     'passthrough': passthroughmiddleware,
     'sentiment': sentimentmiddleware,
     'nertagger': nertaggermiddleware,
-    'nerlemmar': nerlemmarmiddleware
+    'zmq': zmqmiddleware
     }

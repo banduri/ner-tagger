@@ -11,7 +11,7 @@ def cleanup(text):
     pattern = re.compile(r'­',flags=re.UNICODE)
     text = re.sub(pattern, ' ', text)
     
-    return text
+    return str(text)
 
 def nltksentsplit(text, args):
     result = []
@@ -31,7 +31,7 @@ def zmqsentsplit(sent,args):
     socket = context.socket(zmq.REQ)
     socket.connect(args.zmqsplitsocket)
     socket.send(json.dumps({
-        "text": sent
+        "text": cleanup(sent)
     }).encode('utf-8'))
     msg = socket.recv()
     jmsg = json.loads(msg.decode("utf-8"))

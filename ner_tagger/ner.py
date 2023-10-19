@@ -126,7 +126,7 @@ def create_app(description, args):
         data = textsplitner(text,args)
     
         # do postprocessing 
-        data = middleware[args.middleware](data)
+        data = middleware[args.middleware](data,args)
 
         return json.dumps(data)
 
@@ -155,13 +155,13 @@ def create_app(description, args):
                 result.append(data)
 
             # do postprocessing 
-            result = middleware[args.middleware](result)
+            result = middleware[args.middleware](result,arbs)
 
             return json.dumps(result)
         else:
             result = ner(text,args)
             # do postprocessing 
-            result = middleware[args.middleware](result)
+            result = middleware[args.middleware](result,args)
             
             return json.dumps(result)
 

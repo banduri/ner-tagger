@@ -9,8 +9,12 @@ rm data/cache_data.ndjson
 ./splitServer.py --log debug --zmqsocket tcp://127.0.0.1:5562 --device gpu &
 ./zmqBroker.py --log debug --frontendsocket tcp://127.0.0.1:5561 --backendsocket tcp://127.0.0.1:5562 &
 
+# setting up middleware-server and zmq-middleware-broker
+./middlewareServer.py --log debug --zmqsocket tcp://127.0.0.1:5564 --device gpu &
+./zmqBroker.py --log debug --frontendsocket tcp://127.0.0.1:5563 --backendsocket tcp://127.0.0.1:5564 &
+
 # cacheserver for mdel
 ./cacheServer.py --log debug &
 
 # webfrontend
-./nerapi.py --log debug --workertimeout 180 --sentsplitter zmq --zmqsplitsocket tcp://127.0.0.1:5561
+./nerapi.py --log debug --workertimeout 180 --sentsplitter zmq --zmqsplitsocket tcp://127.0.0.1:5561 --middleware zmq --zmqmiddlewaresocket tcp://127.0.0.1:5563
