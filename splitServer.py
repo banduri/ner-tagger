@@ -136,7 +136,7 @@ if "error" is not "null" something happend to the model and the "null"-result is
                         help = "define which deviceid to use - other frameworks use 'cuda:0' to force the device")
 
     parser.add_argument('--model', type = str,
-                        default = "de_dep_news_trf", # de_core_news_lg
+                        default = "models/de_dep_news_trf.bin", # de_core_news_lg
                         help = "which model to use - needs to be installed via pip - check https://spacy.io/usage to download models for your hardware/language")
 
     parser.add_argument('--zmqsocket', type = str,
