@@ -27,6 +27,7 @@ class RawTextDefaultsHelpFormatter(argparse.RawDescriptionHelpFormatter,
 def middleware(data, model, args):
     processdata = defaultdict(set)
     result = {}
+    pipedata = []
     # in the case of splitting the text, data is an array of dict. otherwise it is a dict
     # let's make everything an array an process it the same way
     if not isinstance(data,list):
@@ -37,16 +38,23 @@ def middleware(data, model, args):
             for e in datapoint['entities']:
                 confidence = e['labels'][0]['confidence']
                 label = e['labels'][0]['value']
-                text = []
                 if confidence >= args.threshold:
-                    doc = model(e['text'])
+                    # the order is of no use
+                    pipedata.append((e['text'],{'label': label}))
 
-                    for token in doc:
-                        # filter out german artikels like 'der die das', adjektive 
-                        if token.tag_ not in ["ART"]:
-                            text.append(token.lemma_)
-                    text = " ".join(text)        
-                    processdata[label].add(text)
+
+    # process via space-pipe
+    #                     doc = model(e['text'])
+    LOGGER.info("Got %d Entries to process",int(len(pipedata)))
+    #docs = list(model.pipe(list(pipedata)))
+    for doc, context in model.pipe(pipedata, as_tuples=True):
+        text = []
+        for token in doc:
+            # filter out german artikels like 'der die das', adjektive 
+            if token.tag_ not in ["ART"]:
+                text.append(token.lemma_)
+        text = " ".join(text)        
+        processdata[context['label']].add(text)
                 
 
     # make everything a list again
@@ -166,7 +174,7 @@ if "error" is not "null" something happend to the model and the "null"-result is
                         help = "define which deviceid to use - other frameworks use 'cuda:0' to force the device")
 
     parser.add_argument('--model', type = str,
-                        default = "de_dep_news_trf", # de_core_news_lg
+                        default = "./models/de_dep_news_trf.bin", # de_core_news_lg
                         help = "which model to use - needs to be installed via pip - check https://spacy.io/usage to download models for your hardware/language")
     parser.add_argument('--threshold', type = float,
                         default = 0.95,
