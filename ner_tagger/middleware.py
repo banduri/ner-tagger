@@ -72,7 +72,6 @@ def nertaggermiddleware(data,args):
 # check https://zguide.zeromq.org/docs/chapter4/#Client-Side-Reliability-Lazy-Pirate-Pattern
 
 def zmqmiddleware(data,args):
-    ## XXX better error checking... or any checking at all
     REQUEST_TIMEOUT = args.zmqmiddlewaretimeout # milliseconds in array
     REQUEST_RETRIES = len(args.zmqmiddlewaretimeout)
     context = zmq.Context()

@@ -48,12 +48,15 @@ the '/api/nernosplit' endpoint will try to process the text without splitting at
     parser.add_argument('--zmqsplitsocket', type = str,
                         default = "tcp://127.0.0.1:5561",
                         help = "the socket to the frontend of the 'split-zmqbroker'.")
+    parser.add_argument('--zmqsplittimeout', type = int, nargs='+',
+                        default = [5000,10000,30000],
+                        help = "the timeouts for the split-server in milliseconds before every retry - more timeouts, means more retries")
     parser.add_argument('--zmqmiddlewaresocket', type = str,
                         default = "tcp://127.0.0.1:5563",
                         help = "the socket to the frontend of the 'middleware-zmqbroker'.")
     parser.add_argument('--zmqmiddlewaretimeout', type = int, nargs='+',
                         default = [5000,10000,30000],
-                        help = "the timeouts from the middleware-server in milliseconds befor every retry - more timeouts, means more retries")
+                        help = "the timeouts for the middleware-server in milliseconds before every retry - more timeouts, means more retries")
                         
     parser.add_argument('--splitlang', type = str,
                         default = "german",
