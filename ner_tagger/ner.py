@@ -6,6 +6,8 @@ from collections import defaultdict
 
 import uuid
 
+from concurrent.futures import ThreadPoolExecutor
+
 from flask import request, Flask
 
 # served via gunicorn custom app
@@ -30,13 +32,16 @@ LOGGER = logging.getLogger(__name__)
 
 def textsplitner(sentences,args):
     result = []
-    for sent in sentsplitter[args.sentsplitter](sentences,args):
-        try:
-            data = ner(sent,args)
-            result.append(data)
-
-        except Exception as exep:
-            LOGGER.warning("could not process request: %s",str(exep))
+    splitsentences = sentsplitter[args.sentsplitter](sentences,args)
+    # do parallel processing on all sentences
+    argsarray = [args]*len(splitsentences)
+    try:
+        with ThreadPoolExecutor(args.maxparallelmodelrequests) as tpool:
+            result = list(tpool.map(ner,splitsentences,argsarray))
+    except Exception as exep:
+        LOGGER.warning("could not process request: %s",str(exep))
+            
+    LOGGER.debug("threadpoolresult: %s",result)
     return result
 
 def cacherequest(sent,args):
@@ -82,19 +87,59 @@ def cacheit(key,value,args):
         LOGGER.info("CacheServer did not store: %s",str(jmsg))
 
 def modelrequest(sent,args):
-    ## XXX better error checking... or any checking at all
-    modelcontext = zmq.Context()
-    modelsocket = modelcontext.socket(zmq.REQ)
-    modelsocket.connect(args.zmqmodelsocket)
-    modelsocket.send(json.dumps({
-        "text": sent
-    }).encode('utf-8'))
-    modelmsg = modelsocket.recv()
-    jmsg = json.loads(modelmsg.decode("utf-8"))
-    return jmsg['result']
+    REQUEST_TIMEOUT = args.zmqmodeltimeout # milliseconds in array
+    REQUEST_RETRIES = len(args.zmqmodeltimeout)
+    context = zmq.Context()
+    client = context.socket(zmq.REQ)
+    LOGGER.info("Connecting to broker… %s",args.zmqmodelsocket)
+    client.connect(args.zmqmodelsocket)
+    
+    request = json.dumps({ "text": sent }).encode('utf-8')
+    LOGGER.debug("Sending request: %s", request.decode('utf-8'))
+                 
+    client.send(request)
+
+    for retry in range(REQUEST_RETRIES):
+        if (client.poll(REQUEST_TIMEOUT[retry]) & zmq.POLLIN) != 0:
+            # all good - server replied within timeout
+            # fetch message, decode it, check for error and return it if fine
+            msg = client.recv()
+            jmsg = json.loads(msg.decode("utf-8"))
+            # there was an error somehow
+            if isinstance(jmsg['error'], type(None)):
+                LOGGER.info("got data")
+                return jmsg['result']
+            else:
+                LOGGER.warning("try %d/%d server returned with error: %s",retry+1,REQUEST_RETRIES,jmsg['error'])
+                # retry
+                continue
+                
+        LOGGER.warning("No response from server within Timeout: %d (ms)", REQUEST_TIMEOUT[retry])
+        # do not keep the send message any further in RAM since the socket is closed an reopend
+        # http://api.zeromq.org/master:zmq-setsockopt#toc28
+        # 
+        client.setsockopt(zmq.LINGER, 0)
+        client.close()
+
+        logging.info("Reconnecting to server…")
+        # Create new connection
+        client = context.socket(zmq.REQ)
+        client.connect(args.zmqmodelsocket)
+        logging.info("Retry: %d with timeout %d (ms) sending (%s)", retry, REQUEST_TIMEOUT[retry], request)
+        client.send(request)
+
+    # all retries died
+    LOGGER.error("Server seems to be offline after %d retries and %s timeouts -> abandoning",
+                 REQUEST_RETRIES, str(REQUEST_TIMEOUT))
+    client.setsockopt(zmq.LINGER, 0)
+    client.close()
+
+    # act as it would be a passthrough
+    return {}
+
     
 def ner(sent,args):
-    
+
     data = defaultdict(set)
 
     if not args.disablecache:

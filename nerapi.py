@@ -45,6 +45,12 @@ the '/api/nernosplit' endpoint will try to process the text without splitting at
     parser.add_argument('--zmqmodelsocket', type = str,
                         default = "tcp://127.0.0.1:5559",
                         help = "the socket of the model-server or broker")
+    parser.add_argument('--zmqmodeltimeout', type = int, nargs='+',
+                        default = [2000,5000,10000],
+                        help = "the timeouts for the model-server in milliseconds before every retry - more timeouts, means more retries")
+    parser.add_argument('--maxparallelmodelrequests', type = int,
+                        default = 4,
+                        help = "after splitting the text into sentences, they are send to the modelserver. defines how many parallel-requests are made. if there is more then one modelserver it is resonable to use all in parallel.")
     parser.add_argument('--zmqsplitsocket', type = str,
                         default = "tcp://127.0.0.1:5561",
                         help = "the socket to the frontend of the 'split-zmqbroker'.")
