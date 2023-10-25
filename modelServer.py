@@ -100,7 +100,7 @@ def main(args):
             
             continue
 
-        LOGGER.info("starting prediction:")
+        LOGGER.info("starting prediction on device: %s ", args.device)
         try:
             model.predict(sentence)
         except Exception as excep:
