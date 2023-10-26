@@ -101,24 +101,26 @@ def main(args):
         result = []
         jmsg = None
         
-        message = socket.recv()
+        address, empty, request = socket.recv_multipart()
         
         try:
-            jmsg = json.loads(message.decode("utf-8"))
+            jmsg = json.loads(request.decode("utf-8"))
         except Exception as excep:
             LOGGER.warning("could not decode json message from socket: %s",str(excep))
-            socket.send(json.dumps({
-                "result": None,
-                "error": "could not decode json message from socket"
-            }).encode('utf-8'))
+            socket.send_multipart([address, b'',
+                                   json.dumps({
+                                       "result": None,
+                                       "error": "could not decode json message from socket"
+                                   }).encode('utf-8')])
             continue
 
         if 'data' not in jmsg:
             LOGGER.warning("skipping: no data in message")
-            socket.send(json.dumps({
-                "result": None,
-                "error": "no data in message"
-            }).encode('utf-8'))
+            socket.send_multipart([address, b'',
+                                   json.dumps({
+                                       "result": None,
+                                       "error": "no data in message"
+                                   }).encode('utf-8')])
             
             continue
 
@@ -128,17 +130,18 @@ def main(args):
             result = middleware(jmsg['data'], model, args)
         except Exception as excep:
             LOGGER.warning("predition failed: %s",str(excep))
-            socket.send(json.dumps({
-                "result": None,
-                "error": "prediction failed - check server"
-            }).encode('utf-8'))
+            socket.send_multipart([address, b'',
+                                   json.dumps({
+                                       "result": None,
+                                       "error": "prediction failed - check server"
+                                   }).encode('utf-8')])
             
         LOGGER.info("done prediction")
-
-        socket.send(json.dumps({
-            "result": result,
-            "error": None
-        }).encode('utf-8'))
+        socket.send_multipart([address, b'',
+                               json.dumps({
+                                   "result": result,
+                                   "error": None
+                               }).encode('utf-8')])
         # drop the cuda-cache
         if not args.keepcudacache and torch.cuda.is_available():
             torch.cuda.empty_cache()

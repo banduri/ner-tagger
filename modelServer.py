@@ -58,27 +58,31 @@ def main(args):
     socket = None
     try:
         context = zmq.Context()
-        socket = context.socket(zmq.REP)
+        socket = context.socket(zmq.REQ)
         socket.connect(args.zmqsocket)
     except Exception as excep:
         LOGGER.critical("Could not connect to zmq-broker:%s",str(excep))
         return
 
+    LOGGER.info("announcing myself to Broker")
+    socket.send(b"READY")
+    
     while True:
         sentence = None
         result = []
         jmsg = None
         
-        message = socket.recv()
+        address, empty, request = socket.recv_multipart()
         
         try:
-            jmsg = json.loads(message.decode("utf-8"))
+            jmsg = json.loads(request.decode("utf-8"))
         except Exception as excep:
             LOGGER.warning("could not decode json message from socket: %s",str(excep))
-            socket.send(json.dumps({
-                "result": None,
-                "error": "could not decode json message from socket"
-            }).encode('utf-8'))
+            socket.send_multipart([address, b'',
+                                   json.dumps({
+                                       "result": None,
+                                       "error": "could not decode json message from socket"
+                                   }).encode('utf-8')])
             continue
 
         if 'text' in jmsg:
@@ -86,17 +90,19 @@ def main(args):
                 sentence = Sentence(jmsg['text'])
             except Exception as excep:
                 LOGGER.warning("could not create datastructure for model: %s",str(excep))
-                socket.send(json.dumps({
-                    "result": None,
-                    "error": "could not create (internal) datastructure for model"
-                }).encode('utf-8'))
+                socket.send_multipart([address, b'',
+                                       json.dumps({
+                                           "result": None,
+                                           "error": "could not create (internal) datastructure for model"
+                                       }).encode('utf-8')])
                 continue
         else:
             LOGGER.warning("skipping: no text in message")
-            socket.send(json.dumps({
-                "result": None,
-                "error": "no text in message"
-            }).encode('utf-8'))
+            socket.send_multipart([address, b'',
+                                   json.dumps({
+                                       "result": None,
+                                       "error": "no text in message"
+                                   }).encode('utf-8')])
             
             continue
 
@@ -105,18 +111,19 @@ def main(args):
             model.predict(sentence)
         except Exception as excep:
             LOGGER.warning("predition failed: %s",str(excep))
-            socket.send(json.dumps({
-                "result": None,
-                "error": "prediction failed - check server"
-            }).encode('utf-8'))
+            socket.send_multipart([address, b'',
+                                   json.dumps({
+                                       "result": None,
+                                       "error": "prediction failed - check server"
+                                   }).encode('utf-8')])
             
         LOGGER.info("done prediction")
         result = sentence.to_dict()
-
-        socket.send(json.dumps({
-            "result": result,
-            "error": None
-        }).encode('utf-8'))
+        socket.send_multipart([address, b'',
+                               json.dumps({
+                                   "result": result,
+                                   "error": None
+                               }).encode('utf-8')])
         # drop the cuda-cache
         if not args.keepcudacache and torch.cuda.is_available():
             torch.cuda.empty_cache()
