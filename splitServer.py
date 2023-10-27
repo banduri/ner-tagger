@@ -23,6 +23,14 @@ class RawTextDefaultsHelpFormatter(argparse.RawDescriptionHelpFormatter,
                                    argparse.ArgumentDefaultsHelpFormatter):
     pass
 
+def doSplit(model, text):
+    result = []
+    sentences = model(text).sents
+    for sentence in sentences:
+        # need to do that to ensure it is a string that can be converted to json
+        result.append(str(sentence))
+
+    return result
 
 def main(args):
     model = None
@@ -86,10 +94,9 @@ def main(args):
 
         LOGGER.info("starting prediction:")
         try:
-            sentences = model(jmsg['text']).sents
-            for sentence in sentences:
-                # need to do that to ensure it is a string that can be converted to json
-                result.append(str(sentence))
+
+            result = doSplit(model, jmsg['text'])
+
         except Exception as excep:
             LOGGER.warning("predition failed: %s",str(excep))
             socket.send_multipart([address, b'',
