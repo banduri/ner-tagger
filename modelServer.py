@@ -8,7 +8,7 @@ from collections import defaultdict
 import zmq
 
 import flair
-from flair.data import Span
+
 from flair.nn import Classifier
 from flair.data import Sentence
 
@@ -27,6 +27,15 @@ class RawTextDefaultsHelpFormatter(argparse.RawDescriptionHelpFormatter,
                                    argparse.ArgumentDefaultsHelpFormatter):
     pass
 
+
+def doModel(model, text, args):
+
+    sentence = Sentence(text)
+    
+    model.predict(sentence)
+    result = sentence.to_dict()
+
+    return result
 
 def main(args):
     model = None
@@ -68,8 +77,7 @@ def main(args):
     socket.send(b"READY")
     
     while True:
-        sentence = None
-        result = []
+        result = None
         jmsg = None
         
         address, empty, request = socket.recv_multipart()
@@ -85,18 +93,7 @@ def main(args):
                                    }).encode('utf-8')])
             continue
 
-        if 'text' in jmsg:
-            try:
-                sentence = Sentence(jmsg['text'])
-            except Exception as excep:
-                LOGGER.warning("could not create datastructure for model: %s",str(excep))
-                socket.send_multipart([address, b'',
-                                       json.dumps({
-                                           "result": None,
-                                           "error": "could not create (internal) datastructure for model"
-                                       }).encode('utf-8')])
-                continue
-        else:
+        if 'text' not in jmsg:
             LOGGER.warning("skipping: no text in message")
             socket.send_multipart([address, b'',
                                    json.dumps({
@@ -108,17 +105,19 @@ def main(args):
 
         LOGGER.info("starting prediction on device: %s ", args.device)
         try:
-            model.predict(sentence)
+
+            result = doModel(model, jmsg['text'], args)
+            
         except Exception as excep:
             LOGGER.warning("predition failed: %s",str(excep))
             socket.send_multipart([address, b'',
                                    json.dumps({
                                        "result": None,
-                                       "error": "prediction failed - check server"
+                                       "error": "prediction failed: %s" %(str(execp))
                                    }).encode('utf-8')])
             
         LOGGER.info("done prediction")
-        result = sentence.to_dict()
+
         socket.send_multipart([address, b'',
                                json.dumps({
                                    "result": result,
