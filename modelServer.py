@@ -4,6 +4,7 @@ import logging
 import argparse
 import json
 from collections import defaultdict
+from random import randint
 
 import zmq
 
@@ -67,7 +68,9 @@ def main(args):
     socket = None
     try:
         context = zmq.Context()
+        identity = b"%s-%04X-%04X" % (str(device), randint(0, 0x10000), randint(0, 0x10000))
         socket = context.socket(zmq.REQ)
+        socket.setsockopt(zmq.IDENTITY, identity)
         socket.connect(args.zmqsocket)
     except Exception as excep:
         LOGGER.critical("Could not connect to zmq-broker:%s",str(excep))
