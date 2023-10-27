@@ -68,7 +68,11 @@ def main(args):
     socket = None
     try:
         context = zmq.Context()
-        identity = b"%s-%04X-%04X" % (str(device), randint(0, 0x10000), randint(0, 0x10000))
+        prefix = str(device)
+        if args.identityprefix:
+            prefix = args.identityprefix
+            
+        identity = b"%s-%04X-%04X" % (prefix, randint(0, 0x10000), randint(0, 0x10000))
         socket = context.socket(zmq.REQ)
         socket.setsockopt(zmq.IDENTITY, identity)
         socket.connect(args.zmqsocket)
@@ -167,6 +171,10 @@ if "error" is not "null" something happend to the model and the "null"-result is
     parser.add_argument('--zmqsocket', type = str,
                         default = "tcp://localhost:5560",
                         help = "where to find the zmq-proxy/broker to register as worker")
+
+    parser.add_argument('--identityprefix', type = str,
+                        default = None,
+                        help = "set an identityprefix for zmq-worker-identityname. If None is given used device is choosen")
 
     parser.add_argument('--keepcudacache', action="store_true",
                         help = "keep the cachedata on the cuda-device. default is to drop the cache after prediction to free no longer used memory on the device")
