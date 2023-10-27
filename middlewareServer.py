@@ -23,8 +23,7 @@ class RawTextDefaultsHelpFormatter(argparse.RawDescriptionHelpFormatter,
                                    argparse.ArgumentDefaultsHelpFormatter):
     pass
 
-
-def middleware(data, model, args):
+def doMiddleware(model, data, args):
     processdata = defaultdict(set)
     result = {}
     pipedata = []
@@ -127,7 +126,7 @@ def main(args):
         LOGGER.info("starting processing:")
         data = jmsg['data']
         try:
-            result = middleware(jmsg['data'], model, args)
+            result = doMiddleware(model, jmsg['data'], args)
         except Exception as excep:
             LOGGER.warning("predition failed: %s",str(excep))
             socket.send_multipart([address, b'',

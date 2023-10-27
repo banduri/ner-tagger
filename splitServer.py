@@ -23,7 +23,7 @@ class RawTextDefaultsHelpFormatter(argparse.RawDescriptionHelpFormatter,
                                    argparse.ArgumentDefaultsHelpFormatter):
     pass
 
-def doSplit(model, text):
+def doSplit(model, text, args):
     result = []
     sentences = model(text).sents
     for sentence in sentences:
@@ -95,7 +95,7 @@ def main(args):
         LOGGER.info("starting prediction:")
         try:
 
-            result = doSplit(model, jmsg['text'])
+            result = doSplit(model, jmsg['text'], args)
 
         except Exception as excep:
             LOGGER.warning("predition failed: %s",str(excep))
