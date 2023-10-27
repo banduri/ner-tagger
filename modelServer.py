@@ -38,6 +38,26 @@ def doModel(model, text, args):
 
     return result
 
+def setupSocket(args, prefix=None):
+    try:
+        context = zmq.Context()
+        if args.identityprefix:
+            prefix = args.identityprefix
+            
+        identity = b"%s-%04X-%04X" % (prefix, randint(0, 0x10000), randint(0, 0x10000))
+        socket = context.socket(zmq.REQ)
+        socket.setsockopt(zmq.IDENTITY, identity)
+        socket.connect(args.zmqsocket)
+        LOGGER.info("announcing myself to Broker as: %s" %(identity.decode()))
+        socket.send(b"READY")
+
+        return socket
+
+    except Exception as excep:
+        LOGGER.critical("Could not connect to zmq-broker:%s",str(excep))
+        return None
+
+
 def main(args):
     model = None
     
@@ -65,24 +85,10 @@ def main(args):
 
     LOGGER.debug("connecting to zmq-broker")
 
-    socket = None
-    try:
-        context = zmq.Context()
-        prefix = str(device)
-        if args.identityprefix:
-            prefix = args.identityprefix
-            
-        identity = b"%s-%04X-%04X" % (prefix, randint(0, 0x10000), randint(0, 0x10000))
-        socket = context.socket(zmq.REQ)
-        socket.setsockopt(zmq.IDENTITY, identity)
-        socket.connect(args.zmqsocket)
-    except Exception as excep:
-        LOGGER.critical("Could not connect to zmq-broker:%s",str(excep))
-        return
-
-    LOGGER.info("announcing myself to Broker")
-    socket.send(b"READY")
+    socket = setupSocket(args, prefix=str(device))
     
+    assert not isinstance(socket, type(None)), "ZeroMQ Socket coult not be created"
+
     while True:
         result = None
         jmsg = None

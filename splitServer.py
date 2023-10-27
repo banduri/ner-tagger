@@ -32,6 +32,23 @@ def doSplit(model, text, args):
 
     return result
 
+def setupSocket(args,prefix=None):
+    if args.identityprefix:
+            prefix = args.identityprefix
+    try:
+        context = zmq.Context()
+
+        identity = b"%s-%04X-%04X" % (prefix, randint(0, 0x10000), randint(0, 0x10000))
+        socket = context.socket(zmq.REQ)
+        socket.connect(args.zmqsocket)
+        LOGGER.info("announcing myself to Broker as: %s" %(identity.decode()))
+        socket.send(b"READY")
+        return socket
+
+    except Exception as excep:
+        LOGGER.critical("Could not connect to zmq-broker:%s",str(excep))
+        return None
+
 def main(args):
     model = None
     
@@ -53,17 +70,10 @@ def main(args):
         LOGGER.critical("Failed to load model: %s",str(excep))
         return
 
-    LOGGER.debug("connecting to zmq-broker")
 
-    socket = None
-    try:
-        context = zmq.Context()
-        socket = context.socket(zmq.REP)
-        socket.connect(args.zmqsocket)
-    except Exception as excep:
-        LOGGER.critical("Could not connect to zmq-broker:%s",str(excep))
-        return
-
+    socket = setupSocket(args, prefix="%s-%s" %(args.device, str(args.deviceid)))
+    assert not isinstance(socket, type(None)), "ZeroMQ Socket coult not be created"
+    
     while True:
         sentence = None
         result = []
@@ -153,6 +163,10 @@ if "error" is not "null" something happend to the model and the "null"-result is
     parser.add_argument('--zmqsocket', type = str,
                         default = "tcp://localhost:5562",
                         help = "where to find the zmq-proxy/broker to register as worker")
+
+    parser.add_argument('--identityprefix', type = str,
+                        default = None,
+                        help = "set an identityprefix for zmq-worker-identityname. If None is given used device is choosen")
 
     parser.add_argument('--keepcudacache', action="store_true",
                         help = "keep the cachedata on the cuda-device. default is to drop the cache after prediction to free no longer used memory on the device")
