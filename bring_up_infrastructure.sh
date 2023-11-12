@@ -23,8 +23,7 @@ rm data/cache_data.ndjson
 ./cacheServer.py --zmqsocket ipc:///tmp/cache.ipc &
 
 # webfrontend
-#./nerapi.py --sentsplitter zmq --zmqsplitsocket tcp://127.0.0.1:5561 --middleware zmq --zmqmiddlewaresocket tcp://127.0.0.1:5563
-
+# connects cache, sentences-split, model and middleware
 # only modelserver and no cache
 ./nerapi.py --workertimeout 180 \
 	--zmqmodelsocket tcp://127.0.0.1:5559 \

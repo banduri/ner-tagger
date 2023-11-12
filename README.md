@@ -10,18 +10,18 @@ a http-api to provide Named-entity recognition for text
     pip install -r requirements
 
 # size
-
     (ner-tagger) ~/GITs/ner-tagger >>> du -h -d 1
-    52K	./debian
-    36K	./ner_tagger
-    5.4G	./lib
-    184K	./bin
-    2.2M	./share
-    2.2G	./models
-    3.7M	./nltk_data
-    2.1M	./.git
-    4.0K	./data
-    7.6G	.
+    52K    ./debian
+    80K    ./ner_tagger
+    6.8G   ./lib
+    192K   ./bin
+    2.2M   ./share
+    4.0G   ./models
+    3.7M   ./nltk_data
+    3.0M   ./.git
+    4.0K   ./data
+    64K    ./doc
+    11G    .
 
 # debian package
 
@@ -63,6 +63,8 @@ it is possible to run more then one ModelServer on the same host, while every in
     ./zmqBroker.py &
     ./nerapi.py
 
+See [full example](./bring_up_infrastructure.sh) for more
+
 # api endpoints
 
 ## http-frontend
@@ -87,7 +89,7 @@ Splitting up the text into sentences sometimes yields wrong results.
     {"haben in Dresden eine Wohnung.": {"GPE": ["Dresden"]}}
     {"In dem Buch Traumwerkstadt wird die Wohnung beschrieben.": {"WORK_OF_ART": ["Traumwerkstadt"]}}
 
-the second endpoint does not split, but leads to a general problem with neural networks
+the 'nernosplit' endpoint does not split the paragraph into two sentences. this leads to a general problem with neural networks
 
     curl http://localhost:8000/api/v1/nernosplit -d '{"text": "die Kinder von Elisabeth II. haben in Dresden eine Wohnung. In dem Buch Traumwerkstadt wird die Wohnung beschrieben."}' -H "Content-Type: application/json"
     {"PERSON": ["Elisabeth II"], "GPE": ["Dresden"]}
@@ -102,11 +104,26 @@ to only get the sentences without any models involved:
     curl http://localhost:8000/api/v1/split -d '{"text": "die Kinder von Elisabeth II. haben in Dresden eine Wohnung. In dem Buch \"Traumwerkstadt\" wird die Wohnung beschrieben."}' -H "Content-Type: application/json"
     {"splits": ["die Kinder von Elisabeth II.", "haben in Dresden eine Wohnung.", "In dem Buch \"Traumwerkstadt\" wird die Wohnung beschrieben."]}
 
-if the 'maxnosplit' value is reached on the nosplit-endpoint, the text will be splitup at sentence bounderies into parts a little smaller then the maxnosplit value.
+if the 'maxnosplit' value is reached on the nosplit-endpoint, the text will be splitup at sentence bounderies into parts a little bit smaller then the maxnosplit value. Each part will be send to the model.
 
-## Zeromq-endpoints
+## Zeromq
 
-The cacheserver and the modelserver are used via json-requests.
+All 'internal' components are connected via zeromq. The API-Server connects to every Broker. The different Broker are waiting for their servers to connect. If a Broker does not get a heartbeat from one of their servers, this server is removed from the queue. The servers expecting to get heartbeats from the broker and try to reconnect. The API-Frontend does not send any heartbeats to the brokers. If a broker does not reply to a request within a timeout, the request is send again.
+
+### zmq-internal-protocol
+
+All messages between the zmq-instances are exchanging their data via json-serialization.
+
+For the Cache it looks like this:
+API->Cache - storerequest
+    { "cmd": "store", "key": "sentence", "value": "content of key" }
+Cache->API - storeresponse
+    { "result": "ACK", "error": null }
+API->Cache - lookuprequest
+    { "cmd": "retrieve", "key": "sentence" }
+Cache->API - lookupresponse
+    { "result": "content of key", "error": null }
+If anything goes wrong "result" is null and "error" contains the short description of the problem
 
 ### cacheserver
 
@@ -134,4 +151,63 @@ it accepts json in the form:
 it returns a json-string with the result of the model-prediction:
 
     { "result": <data|null>, "error": <msg|null> }
+
+The '<data>' is modeldependent and defined by the flair-framework. It is the direct result of
+    sentence = Sentence(text)
+    model.predict(sentence)
+    return sentence.to_dict()
+
+example 'to_dict()' is defined like this
+
+    def to_dict(self, tag_type: Optional[str] = None):
+        return {
+            "text": self.to_original_text(),
+            "labels": [label.to_dict() for label in self.get_labels(tag_type) if label.data_point is self],
+            "entities": [span.to_dict(tag_type) for span in self.get_spans(tag_type)],
+            "relations": [relation.to_dict(tag_type) for relation in self.get_relations(tag_type)],
+            "tokens": [token.to_dict(tag_type) for token in self.tokens],
+        }
+
+### splitserver
+
+it accepts json in the form:
+
+    { "text" "<text>" }
+
+it returns a json-string with the result of the model-prediction:
+
+    { "result": <data|null>, "error": <msg|null> }
+
+The '<data>' is an array of strings, where each element of the array is a seperate sentence. The array is in order of the sentences in the paragraph. E.g. no reordering of the sentences takes place.
+
+### middlewareserver
+
+the json-format is a little different since it is no longer unstrucktured text
+
+request:
+    { "data" <data> }
+response:
+    { "result": <data|null>, "error": <msg|null> }
+
+the Frontend-API sends the result of the model unchanged to the middlewareserver.
+
+### zmq-Reliable Request-Reply and loadbalancing
+
+the API-Frontend ensures reliability to the brokers by following the zeromq-book for the 'lazy pirat pattern': https://zguide.zeromq.org/docs/chapter4/#Client-Side-Reliability-Lazy-Pirate-Pattern
+
+the Brokers, with their server, follow the 'paranoid pirate pattern' at https://zguide.zeromq.org/docs/chapter4/#Robust-Reliable-Queuing-Paranoid-Pirate-Pattern and https://zguide.zeromq.org/docs/chapter4/#Heartbeating-for-Paranoid-Pirate for their heartbeat. The loadbalancing is realized via https://zguide.zeromq.org/docs/chapter3/#The-Load-Balancing-Pattern
+
+
+# custom models
+
+Since it is flair the general howto for finetuneing and task-specific training applies. A good starting-point is https://flairnlp.github.io/docs/tutorial-training/how-model-training-works . For the final model can be directly passed to the modelserver via commandlineswitch.
+
+## example - taz.de articles
+
+An example of the trainingprozess can be found inside the CustomModelTrainingExample.ipynb . The content of about 250k newspaper articles of 'taz. Die Tageszeitung' was used to train a text-classifiere. The used XML-Files can be fetched by appending 'c.xml' at the end of an article. like: https://taz.de/Linkes-Engagement-in-den-US-Suedstaaten/!5969356/c.xml
+
+since it is a TextClassifier, and not a ner-tagging/SequenceTagger the middleware-server should be disabled and the 'nernosplit'-Endpoind should be used, since the model is trained on a larger text.
+
+     ./nerapi.py --middleware passthrough
+     ./modelServer.py --model models/taz-resort-class.final.pt
 
