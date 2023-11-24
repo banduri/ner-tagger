@@ -5,7 +5,7 @@ import logging
 
 LOGGER = logging.getLogger(__name__)
 
-def passthroughmiddleware(data):
+def passthroughmiddleware(data,args):
     """
     does nothing 
     """
