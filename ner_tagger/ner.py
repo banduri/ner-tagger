@@ -200,7 +200,7 @@ def create_app(description, args):
                 result.append(data)
 
             # do postprocessing 
-            result = middleware[args.middleware](result,arbs)
+            result = middleware[args.middleware](result,args)
 
             return json.dumps(result)
         else:
